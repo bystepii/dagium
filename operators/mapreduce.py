@@ -52,8 +52,8 @@ class MapReduce(Operator):
         """
         input_data, output_data = super().get_input_output(input_data, output_data)
         return self._executor.map_reduce(
-                self._map_func,
-                input_data.get(),
+                super().input_data_wrapper(self._map_func),
+                input_data,
                 self._reduce_func,
                 self._args,
                 **self._kwargs

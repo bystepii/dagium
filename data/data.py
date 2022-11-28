@@ -1,5 +1,5 @@
 from abc import abstractmethod, ABC
-from typing import Any
+from typing import Any, Sized
 
 from lithops import Storage
 
@@ -69,7 +69,7 @@ class InMemoryDataSource(DataSource):
     @property
     def metadata(self) -> dict[str, Any]:
         return super().metadata | \
-               {'size': len(self._data) if self._data is not None else 0} | \
+               {'size': len(self._data) if isinstance(self._data, Sized) else 1} | \
                {'type': type(self._data)}
 
 

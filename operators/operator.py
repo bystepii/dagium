@@ -122,6 +122,13 @@ class Operator(ABC):
         """ Execute the operator. """
         pass
 
+    @staticmethod
+    def input_data_wrapper(func: callable) -> callable:
+        def wrapper(input_data: DataObject):
+            return func(input_data.get())
+
+        return wrapper
+
     def __lshift__(self, other: Operator | list[Operator]):
         """ Overload the << operator to add a parent to this operator. """
         self.add_parent(other)

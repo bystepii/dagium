@@ -50,8 +50,8 @@ class Map(Operator):
         """
         input_data, output_data = super().get_input_output(input_data, output_data)
         return self._executor.map(
-                self._map_func,
-                input_data.get(),
+                super().input_data_wrapper(self._map_func),
+                input_data,
                 *self._args,
                 **self._kwargs
         )
