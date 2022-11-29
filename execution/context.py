@@ -15,14 +15,9 @@ class Context:
     """
 
     def __init__(self, tasks_ids: list[str]):
-        self._input_data: dict[str, DataObject] = dict.fromkeys(tasks_ids, None)
         self._output_data: dict[str, DataObject] = dict.fromkeys(tasks_ids, None)
         self._futures: dict[str, Any] = dict.fromkeys(tasks_ids, None)
         self._done = dict.fromkeys(tasks_ids, None)
-
-    @property
-    def input_data(self) -> dict[str, DataObject]:
-        return self._input_data
 
     @property
     def futures(self) -> dict[str, Any]:

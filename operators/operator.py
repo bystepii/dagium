@@ -32,7 +32,7 @@ class Operator(ABC):
             self,
             task_id: str,
             executor: Executor,
-            input_data: DataObject = None,
+            input_data: DataObject | dict[str, DataObject] = None,
             output_data: DataObject = None,
             metadata: dict[str, Any] = None,
             *args,
@@ -40,7 +40,7 @@ class Operator(ABC):
     ):
         self._task_id = task_id
         self._executor = executor
-        self._input_data = input_data
+        self._input_data = input_data if isinstance(input_data, dict) else {'root': input_data}
         self._output_data = output_data
         self._metadata = metadata or dict()
         self._args = args
@@ -69,7 +69,7 @@ class Operator(ABC):
         return self._children
 
     @property
-    def input_data(self) -> DataObject:
+    def input_data(self) -> dict[str, DataObject]:
         """ Input data object """
         return self._input_data
 
@@ -101,9 +101,9 @@ class Operator(ABC):
 
     def get_input_output(
             self,
-            input_data: DataObject = None,
+            input_data: dict[str, DataObject] = None,
             output_data: DataObject = None
-    ) -> tuple[DataObject, DataObject]:
+    ) -> tuple[dict[str, DataObject], DataObject]:
         """ Get input and output data objects. """
         input_data, output_data = input_data or self._input_data, output_data or self._output_data
         if input_data is None:
@@ -116,7 +116,7 @@ class Operator(ABC):
     @abstractmethod
     def __call__(
             self,
-            input_data: DataObject = None,
+            input_data: dict[str, DataObject] = None,
             output_data: DataObject = None,
     ) -> Any:
         """ Execute the operator. """
@@ -124,8 +124,10 @@ class Operator(ABC):
 
     @staticmethod
     def input_data_wrapper(func: callable) -> callable:
-        def wrapper(input_data: DataObject):
-            return func(input_data.get())
+        def wrapper(input_data: dict[str, DataObject]):
+            if len(input_data) == 1:
+                return func(input_data.popitem()[1].get())
+            return func({k: v.get() for k, v in input_data.items()})
 
         return wrapper
 

@@ -50,9 +50,16 @@ class DagExecutor:
 
         :param task: Task to execute
         """
+
+        # Get the input data of the task from the parent tasks
+        if task.parents:
+            input_data = {parent.task_id: self._context.output_data[parent.task_id] for parent in task.parents}
+        else:
+            input_data = task.input_data
+
         logger.info(f'Executing task {task.task_id}')
         self._context.futures[task.task_id] = task(
-                self._context.input_data[task.task_id],
+                input_data,
                 self._context.output_data[task.task_id]
         )
         self._futures.append(self._threads.submit(self._wait_for_futures, task, self._context))
@@ -74,10 +81,6 @@ class DagExecutor:
 
         logger.info(f'Task {task.task_id} completed')
         context.done[task.task_id] = True
-
-        # set the output data of the task as the input data of the children
-        for child in task.children:
-            context.input_data[child.task_id] = context.output_data[task.task_id]
 
         # If the task has no children, it is a final task, and we can release the semaphore
         if not task.children:

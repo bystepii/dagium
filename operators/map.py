@@ -41,7 +41,7 @@ class Map(Operator):
 
     def __call__(
             self,
-            input_data: DataObject = None,
+            input_data: dict[str, DataObject] = None,
             output_data: DataObject = None,
     ) -> FuturesList:
         """

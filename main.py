@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from lithops import FunctionExecutor, Storage
 
@@ -27,6 +28,11 @@ class LithopsFunctionExecutor(Executor):
 def my_function(x):
     print(f'Executing my_function with x={x}')
     return x + 1
+
+
+def another_function(args: dict[str, Any]):
+    print(f'Executing another_function with args={args}')
+    pass
 
 
 # Press the green button in the gutter to run the script.
@@ -60,10 +66,16 @@ if __name__ == '__main__':
             func=my_function,
             output_data=DataObject(InMemoryDataSource())
     )
+    task5 = CallAsync(
+            'task5',
+            executor=ex,
+            func=another_function,
+            output_data=DataObject(InMemoryDataSource())
+    )
 
-    task1 >> task2 >> task3 >> task4
+    task1 >> task2 >> [task3, task4] >> task5
 
-    dag.add_tasks([task1, task2, task3, task4])
+    dag.add_tasks([task1, task2, task3, task4, task5])
     executor = DagExecutor(dag, num_threads=10)
     executor.execute()
 

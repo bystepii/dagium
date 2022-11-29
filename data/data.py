@@ -3,6 +3,7 @@ from abc import abstractmethod, ABC
 from typing import Any, Sized
 
 from lithops import Storage
+from lithops.storage.utils import StorageNoSuchKeyError
 
 
 class DataSource(ABC):
@@ -42,7 +43,10 @@ class StorageDataSource(DataSource):
         self._bucket = bucket
         self._storage = storage
         super().metadata['bucket'] = bucket
-        super().metadata['storage_metadata'] = self._storage.head_object(self._bucket, self._path)
+        try:
+            super().metadata['storage_metadata'] = self._storage.head_object(self._bucket, self._path) or dict()
+        except StorageNoSuchKeyError:
+            super().metadata['storage_metadata'] = dict()
 
     def get(self) -> Any:
         return pickle.loads(self._storage.get_object(self._bucket, self._path))
