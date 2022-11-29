@@ -2,8 +2,8 @@ from typing import Any
 
 from lithops.utils import FuturesList
 
-from data import DataObject
-from operators import Operator, Executor
+from dagium.data import DataObject
+from dagium.operators import Operator, Executor
 
 
 class MapReduce(Operator):

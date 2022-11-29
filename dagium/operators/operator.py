@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import abstractmethod, ABC
 from typing import Any
 
-from data import DataObject
+from dagium.data import DataObject
 
 
 class Executor(ABC):

@@ -3,10 +3,10 @@ from typing import Any
 
 from lithops import FunctionExecutor, Storage
 
-from dag import DAG
-from data import DataObject, InMemoryDataSource, StorageDataSource
-from execution import DagExecutor
-from operators import CallAsync, Executor
+from dagium.dag import DAG
+from dagium.data import DataObject, InMemoryDataSource, StorageDataSource
+from dagium.execution import DagExecutor
+from dagium.operators import CallAsync, Executor
 
 config = {'lithops': {'backend': 'localhost', 'storage': 'localhost'}}
 

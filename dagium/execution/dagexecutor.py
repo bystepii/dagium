@@ -2,9 +2,9 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from threading import Semaphore
 
-from dag import DAG
-from execution.context import Context
-from operators.operator import Operator
+from dagium.dag import DAG
+from dagium.execution.context import Context
+from dagium.operators.operator import Operator
 
 logger = logging.getLogger(__name__)
 

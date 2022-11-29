@@ -1,4 +1,4 @@
-from operators import Operator
+from dagium.operators import Operator
 
 
 class DAG:

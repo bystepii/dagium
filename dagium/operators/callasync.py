@@ -1,18 +1,17 @@
 from typing import Any
 
-from lithops.utils import FuturesList
+from lithops.future import ResponseFuture
 
-from data import DataObject
-from operators import Operator, Executor
+from dagium.data import DataObject
+from dagium.operators import Operator, Executor
 
 
-class Map(Operator):
+class CallAsync(Operator):
     """
-    Map operator
+    CallAsync operator
 
     :param task_id: Task ID
-    :param map_func: Function to map
-    :param metadata: Metadata to pass to the operator
+    :param func: Function to call
     :param args: Arguments to pass to the operator
     :param kwargs: Keyword arguments to pass to the operator
     """
@@ -21,7 +20,7 @@ class Map(Operator):
             self,
             task_id: str,
             executor: Executor,
-            map_func: callable,
+            func: callable,
             input_data: DataObject = None,
             output_data: DataObject = None,
             metadata: dict[str, Any] = None,
@@ -37,20 +36,21 @@ class Map(Operator):
                 *args,
                 **kwargs
         )
-        self._map_func = map_func
+        self._func = func
 
     def __call__(
             self,
             input_data: dict[str, DataObject] = None,
             output_data: DataObject = None,
-    ) -> FuturesList:
-        """
-        Execute the operator.
-        :param context: Context of the execution
-        """
+    ) -> ResponseFuture:
         input_data, output_data = super().get_input_output(input_data, output_data)
-        return self._executor.map(
-                super().input_data_wrapper(self._map_func),
+
+        # If the input data is a dict or a list, it must be wrapped in a tuple,
+        # because the lithops has a special treatment for them.
+        if isinstance(input_data, dict) or isinstance(input_data, list):
+            input_data = (input_data,)
+        return self._executor.call_async(
+                super().input_data_wrapper(self._func),
                 input_data,
                 *self._args,
                 **self._kwargs

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from data import DataObject
+from dagium.data import DataObject
 
 
 @dataclass
