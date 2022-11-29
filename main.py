@@ -1,9 +1,9 @@
 import logging
 
-from lithops import FunctionExecutor
+from lithops import FunctionExecutor, Storage
 
 from dag import DAG
-from data import DataObject, InMemoryDataSource
+from data import DataObject, InMemoryDataSource, StorageDataSource
 from execution import DagExecutor
 from operators import CallAsync, Executor
 
@@ -34,12 +34,13 @@ if __name__ == '__main__':
     dag = DAG('dag')
 
     ex = LithopsFunctionExecutor(FunctionExecutor(config=config))
+    storage = Storage()
     task1 = CallAsync(
             'task1',
             executor=ex,
             func=my_function,
             input_data=DataObject(InMemoryDataSource(), 1),
-            output_data=DataObject(InMemoryDataSource())
+            output_data=DataObject(StorageDataSource('tmp/output1.txt', 'my_bucket', storage))
     )
     task2 = CallAsync(
             'task2',

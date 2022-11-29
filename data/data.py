@@ -1,3 +1,4 @@
+import pickle
 from abc import abstractmethod, ABC
 from typing import Any, Sized
 
@@ -7,8 +8,10 @@ from lithops import Storage
 class DataSource(ABC):
     """Base class for all data sources. """
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, metadata: dict[str, Any] = None):
         self._path = path
+        self._metadata = metadata or dict()
+        self._metadata['path'] = path
 
     @abstractmethod
     def get(self) -> Any:
@@ -26,38 +29,33 @@ class DataSource(ABC):
         return self._path
 
     @property
-    @abstractmethod
     def metadata(self) -> dict[str, Any]:
-        """ The metadata of this data source """
-        return {'path': self._path}
+        """ Metadata of this data source """
+        return self._metadata
 
 
 class StorageDataSource(DataSource):
     """ Data source for lithops storage """
 
-    def __init__(self, path: str, bucket: str, storage: Storage):
-        super().__init__(path)
+    def __init__(self, path: str, bucket: str, storage: Storage, metadata: dict[str, Any] = None):
+        super().__init__(path, metadata)
         self._bucket = bucket
         self._storage = storage
+        super().metadata['bucket'] = bucket
+        super().metadata['storage_metadata'] = self._storage.head_object(self._bucket, self._path)
 
     def get(self) -> Any:
-        return self._storage.get_object(self._bucket, self._path)
+        return pickle.loads(self._storage.get_object(self._bucket, self._path))
 
     def put(self, data: Any):
-        self._storage.put_object(self._bucket, self._path, data)
-
-    @property
-    def metadata(self) -> dict[str, Any]:
-        return super().metadata | \
-               {'bucket': self._bucket} | \
-               {'storage_metadata': self._storage.head_object(self._bucket, self._path)}
+        self._storage.put_object(self._bucket, self._path, pickle.dumps(data))
 
 
 class InMemoryDataSource(DataSource):
     """ Data source for in memory data """
 
-    def __init__(self, data: Any = None):
-        super().__init__("in_memory")
+    def __init__(self, data: Any = None, metadata: dict[str, Any] = None):
+        super().__init__("in_memory", metadata)
         self._data = data
 
     def get(self) -> Any:
@@ -66,25 +64,20 @@ class InMemoryDataSource(DataSource):
     def put(self, data: Any):
         self._data = data
 
-    @property
-    def metadata(self) -> dict[str, Any]:
-        return super().metadata | \
-               {'size': len(self._data) if isinstance(self._data, Sized) else 1} | \
-               {'type': type(self._data)}
-
 
 class DataObject:
     """Base class for all data objects. """
 
-    def __init__(self, data_source: DataSource, data: Any = None, metadata: dict = None):
+    def __init__(self, data_source: DataSource, data: Any = None, metadata: dict[str, Any] = None):
         self._data_source = data_source
         self._metadata = metadata or {}
-        self._data_source.put(data)
+        if data is not None:
+            self.put(data)
 
     @property
     def metadata(self) -> dict[str, Any]:
         """ The metadata of this data object """
-        return {'data_source': self._data_source.metadata} | self._metadata
+        return self._metadata | self._data_source.metadata
 
     def get(self) -> Any:
         """ Get the data of this data object """
@@ -93,3 +86,5 @@ class DataObject:
     def put(self, data: Any):
         """ Put data in this data object """
         self._data_source.put(data)
+        self._metadata['size'] = len(data) if isinstance(data, Sized) else 1
+        self._metadata['type'] = type(data)
