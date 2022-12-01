@@ -3,7 +3,8 @@ from typing import Any
 from lithops.future import ResponseFuture
 
 from dagium.data import DataObject
-from dagium.operators import Operator, Executor
+from dagium.operators.operator import Operator
+from executors.executors import Executor
 
 
 class CallAsync(Operator):

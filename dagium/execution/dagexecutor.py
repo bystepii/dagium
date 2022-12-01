@@ -1,10 +1,10 @@
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from threading import Semaphore
 
 from dagium.dag import DAG
+from dagium.data import DataObject
 from dagium.execution.context import Context
-from dagium.operators.operator import Operator
+from dagium.execution.processors import ThreadPoolProcessor, Processor
+from dagium.operators import TaskState
 
 logger = logging.getLogger(__name__)
 
@@ -16,17 +16,16 @@ class DagExecutor:
     :param num_threads: Number of threads to use for executing the DAG
     """
 
-    def __init__(self, dag: DAG, num_threads: int = 10):
+    def __init__(self, dag: DAG, num_threads: int = 10, processor: Processor = None):
         self._dag = dag
         self._num_threads = num_threads
+        self._processor = processor or ThreadPoolProcessor(num_threads)
         self._context = Context([task.task_id for task in dag.tasks])
-        self._threads = ThreadPoolExecutor(max_workers=self._num_threads)
-        self._futures = []
         self._config = {'lithops': {'backend': 'localhost', 'storage': 'localhost'}}
         self._sem = None
         self._num_final_tasks = None
 
-    def execute(self):
+    def execute(self) -> dict[str, DataObject]:
         """
         Execute the DAG
 
@@ -36,77 +35,41 @@ class DagExecutor:
         self._num_final_tasks = len(self._dag.leaf_tasks)
         logger.info(f'DAG {self._dag.dag_id} has {self._num_final_tasks} final tasks')
 
-        # Semaphore to keep track of the number of final tasks that have completed
-        # It is initialized to 0 and is released (incremented) when a final task completes
-        self._sem = Semaphore(0)
+        dependence_free_tasks = self._dag.root_tasks
+        running_tasks = set()
+        finished_tasks = set()
 
-        # Start executing the root tasks of the DAG
-        for task in self._dag.root_tasks:
-            self._execute_task(task)
+        while dependence_free_tasks:
+            input_data = {}
+            batch_length = min(len(dependence_free_tasks), max(0, self._num_threads - len(running_tasks)))
+            batch = list(dependence_free_tasks)[:batch_length]
+            for task in batch:
+                task.state = TaskState.SCHEDULED
+                if task.parents:
+                    input_data[task.task_id] = {
+                        parent.task_id: self._context.output_data[parent.task_id] for parent in task.parents
+                    }
+                else:
+                    input_data[task.task_id] = task.input_data
 
-    def _execute_task(self, task: Operator):
-        """
-        Execute a task
+            running_tasks |= set(batch)
 
-        :param task: Task to execute
-        """
+            for task in batch:
+                task.state = TaskState.RUNNING
 
-        # Get the input data of the task from the parent tasks
-        if task.parents:
-            input_data = {parent.task_id: self._context.output_data[parent.task_id] for parent in task.parents}
-        else:
-            input_data = task.input_data
+            results = self._processor.process(batch, input_data, {
+                task: output_data for task, output_data in self._context.output_data.items() if task in batch
+            })
 
-        logger.info(f'Executing task {task.task_id}')
-        self._context.futures[task.task_id] = task(
-                input_data,
-                self._context.output_data[task.task_id]
-        )
-        self._futures.append(self._threads.submit(self._wait_for_futures, task, self._context))
+            running_tasks -= set(batch)
+            dependence_free_tasks -= set(batch)
+            finished_tasks |= set(batch)
 
-    def _wait_for_futures(self, task: Operator, context: Context):
-        """
-        Wait for the futures of a task to complete and then execute the children of the task if they are ready.
-        This method is executed in a separate thread.
+            for task in batch:
+                task.output_data.put(results[task.task_id])
+                self._context.output_data[task.task_id] = task.output_data
+                for child in task.children:
+                    if child.parents.issubset(finished_tasks):
+                        dependence_free_tasks.add(child)
 
-        :param task: Task to wait for
-        :param context: Context to use
-        """
-        logger.info(f'Waiting for task {task.task_id} to complete')
-
-        result = task.executor.get_result(context.futures[task.task_id])
-
-        task.output_data.put(result)
-        context.output_data[task.task_id] = task.output_data
-
-        logger.info(f'Task {task.task_id} completed')
-        context.done[task.task_id] = True
-
-        # If the task has no children, it is a final task, and we can release the semaphore
-        if not task.children:
-            self._sem.release()
-            return
-
-        # Check if the children of the task are ready to execute
-        for child in task.children:
-            # If the child has all its parents done, it is ready to execute
-            if all(self._context.done[parent.task_id] for parent in child.parents):
-                logger.info(f'Child task {child.task_id} is ready to execute')
-                self._execute_task(child)
-
-    def wait(self):
-        """
-        Wait for all tasks to complete
-        """
-        logger.info(f'Waiting for {self._num_final_tasks} tasks to complete')
-
-        # Wait for the number of final tasks to complete using the semaphore
-        for _ in range(self._num_final_tasks):
-            self._sem.acquire()
-
-    def shutdown(self):
-        """
-        Shutdown the executor
-        """
-        logger.info('Shutting down executor')
-        self._threads.shutdown()
+        return self._context.output_data

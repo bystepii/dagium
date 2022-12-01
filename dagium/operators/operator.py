@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 from abc import abstractmethod, ABC
+from enum import Enum
 from typing import Any
 
 from dagium.data import DataObject
+from executors.executors import Executor
 
 
-class Executor(ABC):
+class TaskState(Enum):
     """
-    Executor class that contains the functions that are called by the operators
+    State of a task
     """
-
-    def __init__(self, executor: Any):
-        self._executor = executor
-
-    def __getattr__(self, item):
-        return getattr(self._executor, item)
+    NONE = 0
+    SCHEDULED = 1
+    WAITING = 2
+    RUNNING = 3
+    SUCCESS = 4
+    FAILED = 5
 
 
 class Operator(ABC):
@@ -45,8 +47,10 @@ class Operator(ABC):
         self._metadata = metadata or dict()
         self._args = args
         self._kwargs = kwargs
+
         self._children = set()
         self._parents = set()
+        self._state = TaskState.NONE
 
     @property
     def task_id(self) -> str:
@@ -77,6 +81,15 @@ class Operator(ABC):
     def output_data(self) -> DataObject:
         """ Output data object """
         return self._output_data
+
+    @property
+    def state(self) -> TaskState:
+        """ State of this operator """
+        return self._state
+
+    @state.setter
+    def state(self, value):
+        self._state = value
 
     def _set_relation(self, operator_or_operators: Operator | list[Operator], upstream: bool = False):
         """ Set relation between this operator and another operator or list of operators. """

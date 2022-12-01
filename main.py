@@ -1,12 +1,13 @@
 import logging
 from typing import Any
 
-from lithops import FunctionExecutor, Storage
+from lithops import Storage
 
 from dagium.dag import DAG
 from dagium.data import DataObject, InMemoryDataSource, StorageDataSource
 from dagium.execution import DagExecutor
-from dagium.operators import CallAsync, Executor
+from dagium.executors import LithopsLocalhostExecutor
+from dagium.operators import CallAsync
 
 config = {'lithops': {'backend': 'localhost', 'storage': 'localhost'}}
 
@@ -14,15 +15,6 @@ LOGGER_FORMAT = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)s -- %(messag
 logging.basicConfig(format=LOGGER_FORMAT, level=logging.INFO)
 
 logger = logging.getLogger(__name__)
-
-
-class LithopsFunctionExecutor(Executor):
-    """
-    Executor class that contains the functions that are called by the operators
-    """
-
-    def __init__(self, func_exec: FunctionExecutor):
-        super().__init__(func_exec)
 
 
 def my_function(x):
@@ -39,7 +31,7 @@ def another_function(args: dict[str, Any]):
 if __name__ == '__main__':
     dag = DAG('dag')
 
-    ex = LithopsFunctionExecutor(FunctionExecutor(config=config))
+    ex = LithopsLocalhostExecutor()
     storage = Storage()
     task1 = CallAsync(
             'task1',
@@ -77,10 +69,6 @@ if __name__ == '__main__':
 
     dag.add_tasks([task1, task2, task3, task4, task5])
     executor = DagExecutor(dag, num_threads=10)
-    executor.execute()
-
-    print('Waiting for tasks to complete')
-    executor.wait()
+    results = executor.execute()
     print('Tasks completed')
-    print('Shutting down executor')
-    executor.shutdown()
+    print(results)

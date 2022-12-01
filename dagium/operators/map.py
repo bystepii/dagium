@@ -3,7 +3,8 @@ from typing import Any
 from lithops.utils import FuturesList
 
 from dagium.data import DataObject
-from dagium.operators import Operator, Executor
+from dagium.executors import Executor
+from dagium.operators.operator import Operator
 
 
 class Map(Operator):
