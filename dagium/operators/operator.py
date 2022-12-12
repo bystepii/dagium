@@ -4,8 +4,12 @@ from abc import abstractmethod, ABC
 from enum import Enum
 from typing import Any
 
+from lithops import FunctionExecutor
+from lithops.future import ResponseFuture
+from lithops.utils import FuturesList
+
 from dagium.data import DataObject
-from executors.executors import Executor
+from data import InputDataObject, OutputDataObject
 
 
 class TaskState(Enum):
@@ -33,9 +37,9 @@ class Operator(ABC):
     def __init__(
             self,
             task_id: str,
-            executor: Executor,
-            input_data: DataObject | dict[str, DataObject] = None,
-            output_data: DataObject = None,
+            executor: FunctionExecutor,
+            input_data: dict[str, InputDataObject] = None,
+            output_data: OutputDataObject = None,
             metadata: dict[str, Any] = None,
             *args,
             **kwargs
@@ -58,7 +62,7 @@ class Operator(ABC):
         return self._task_id
 
     @property
-    def executor(self) -> Executor:
+    def executor(self) -> FunctionExecutor:
         """ Executor """
         return self._executor
 
@@ -73,12 +77,12 @@ class Operator(ABC):
         return self._children
 
     @property
-    def input_data(self) -> dict[str, DataObject]:
+    def input_data(self) -> dict[str, InputDataObject]:
         """ Input data object """
         return self._input_data
 
     @property
-    def output_data(self) -> DataObject:
+    def output_data(self) -> OutputDataObject:
         """ Output data object """
         return self._output_data
 
@@ -129,20 +133,11 @@ class Operator(ABC):
     @abstractmethod
     def __call__(
             self,
-            input_data: dict[str, DataObject] = None,
-            output_data: DataObject = None,
-    ) -> Any:
+            input_data: dict[str, InputDataObject] = None,
+            output_data: OutputDataObject = None,
+    ) -> ResponseFuture | FuturesList:
         """ Execute the operator. """
         pass
-
-    @staticmethod
-    def input_data_wrapper(func: callable) -> callable:
-        def wrapper(input_data: dict[str, DataObject]):
-            if len(input_data) == 1:
-                return func(input_data.popitem()[1].get())
-            return func({k: v.get() for k, v in input_data.items()})
-
-        return wrapper
 
     def __lshift__(self, other: Operator | list[Operator]):
         """ Overload the << operator to add a parent to this operator. """

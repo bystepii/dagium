@@ -1,10 +1,10 @@
 import logging
 
 from dagium.dag import DAG
-from dagium.data import DataObject
 from dagium.execution.context import Context
-from dagium.execution.processors import ThreadPoolProcessor, Processor
+from dagium.execution.processors import Processor, DefaultProcessor
 from dagium.operators import TaskState
+from data import OutputDataObject, DataObjectFactory
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +19,13 @@ class DagExecutor:
     def __init__(self, dag: DAG, num_threads: int = 10, processor: Processor = None):
         self._dag = dag
         self._num_threads = num_threads
-        self._processor = processor or ThreadPoolProcessor(num_threads)
+        self._processor = processor or DefaultProcessor(num_threads)
         self._context = Context([task.task_id for task in dag.tasks])
         self._config = {'lithops': {'backend': 'localhost', 'storage': 'localhost'}}
         self._sem = None
         self._num_final_tasks = None
 
-    def execute(self) -> dict[str, DataObject]:
+    def execute(self) -> dict[str, OutputDataObject]:
         """
         Execute the DAG
 
@@ -47,17 +47,16 @@ class DagExecutor:
                 task.state = TaskState.SCHEDULED
                 if task.parents:
                     input_data[task.task_id] = {
-                        parent.task_id: self._context.output_data[parent.task_id] for parent in task.parents
+                        parent.task_id: DataObjectFactory.create_input_data_object(
+                            data_object=self._context.output_data[parent.task_id]
+                        ) for parent in task.parents
                     }
                 else:
                     input_data[task.task_id] = task.input_data
 
             running_tasks |= set(batch)
 
-            for task in batch:
-                task.state = TaskState.RUNNING
-
-            results = self._processor.process(batch, input_data, {
+            self._processor.process(batch, input_data, {
                 task: output_data for task, output_data in self._context.output_data.items() if task in batch
             })
 
@@ -66,7 +65,6 @@ class DagExecutor:
             finished_tasks |= set(batch)
 
             for task in batch:
-                task.output_data.put(results[task.task_id])
                 self._context.output_data[task.task_id] = task.output_data
                 for child in task.children:
                     if child.parents.issubset(finished_tasks):

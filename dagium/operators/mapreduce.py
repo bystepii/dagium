@@ -1,10 +1,11 @@
 from typing import Any
 
+from lithops import FunctionExecutor
 from lithops.utils import FuturesList
 
 from dagium.data import DataObject
-from dagium.executors import Executor
 from dagium.operators.operator import Operator
+from data import InputDataObject, OutputDataObject
 
 
 class MapReduce(Operator):
@@ -21,7 +22,7 @@ class MapReduce(Operator):
     def __init__(
             self,
             task_id: str,
-            executor: Executor,
+            executor: FunctionExecutor,
             map_func: callable,
             reduce_func: callable,
             input_data: DataObject = None,
@@ -44,8 +45,8 @@ class MapReduce(Operator):
 
     def __call__(
             self,
-            input_data: dict[str, DataObject] = None,
-            output_data: DataObject = None,
+            input_data: dict[str, InputDataObject] = None,
+            output_data: OutputDataObject = None,
     ) -> FuturesList:
         """
         Execute the operator.
@@ -53,7 +54,7 @@ class MapReduce(Operator):
         """
         input_data, output_data = super().get_input_output(input_data, output_data)
         return self._executor.map_reduce(
-                super().input_data_wrapper(self._map_func),
+                self._map_func,
                 input_data,
                 self._reduce_func,
                 self._args,

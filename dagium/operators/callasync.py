@@ -1,10 +1,11 @@
 from typing import Any
 
+from lithops import FunctionExecutor
 from lithops.future import ResponseFuture
 
 from dagium.data import DataObject
 from dagium.operators.operator import Operator
-from executors.executors import Executor
+from data import InputDataObject, OutputDataObject
 
 
 class CallAsync(Operator):
@@ -20,7 +21,7 @@ class CallAsync(Operator):
     def __init__(
             self,
             task_id: str,
-            executor: Executor,
+            executor: FunctionExecutor,
             func: callable,
             input_data: DataObject = None,
             output_data: DataObject = None,
@@ -41,18 +42,13 @@ class CallAsync(Operator):
 
     def __call__(
             self,
-            input_data: dict[str, DataObject] = None,
-            output_data: DataObject = None,
+            input_data: dict[str, InputDataObject] = None,
+            output_data: OutputDataObject = None,
     ) -> ResponseFuture:
         input_data, output_data = super().get_input_output(input_data, output_data)
-
-        # If the input data is a dict or a list, it must be wrapped in a tuple,
-        # because the lithops has a special treatment for them.
-        if isinstance(input_data, dict) or isinstance(input_data, list):
-            input_data = (input_data,)
         return self._executor.call_async(
-                super().input_data_wrapper(self._func),
-                input_data,
+                self._func,
+                {'input_data': input_data, 'output_data': output_data},
                 *self._args,
                 **self._kwargs
         )

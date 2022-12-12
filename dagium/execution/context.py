@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from dagium.data import DataObject
+from data import OutputDataObject
 
 
 @dataclass
@@ -15,7 +15,7 @@ class Context:
     """
 
     def __init__(self, tasks_ids: list[str]):
-        self._output_data: dict[str, DataObject] = dict.fromkeys(tasks_ids, None)
+        self._output_data: dict[str, OutputDataObject] = dict.fromkeys(tasks_ids, None)
         self._futures: dict[str, Any] = dict.fromkeys(tasks_ids, None)
         self._done = dict.fromkeys(tasks_ids, None)
 
@@ -25,7 +25,7 @@ class Context:
         return self._futures
 
     @property
-    def output_data(self) -> dict[str, DataObject]:
+    def output_data(self) -> dict[str, OutputDataObject]:
         """ The output data of the tasks """
         return self._output_data
 
