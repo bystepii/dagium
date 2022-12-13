@@ -9,9 +9,9 @@ from data import OutputDataObject
 @dataclass
 class Context:
     """
-    Context class that is used to store the state of the execution
+    Context class that is used to store the output data of the tasks, the futures and the done status.
 
-    :param fexec: FunctionExecutor to use for executing the tasks
+    :param tasks_ids: List of tasks IDs
     """
 
     def __init__(self, tasks_ids: list[str]):
@@ -21,15 +21,15 @@ class Context:
 
     @property
     def futures(self) -> dict[str, Any]:
-        """ The futures of the tasks """
+        """Return a dictionary with the task IDs as keys and the futures as values"""
         return self._futures
 
     @property
     def output_data(self) -> dict[str, OutputDataObject]:
-        """ The output data of the tasks """
+        """Return a dictionary with the task IDs as keys and the output data as values"""
         return self._output_data
 
     @property
     def done(self) -> dict[str, bool]:
-        """ The done status of the tasks """
+        """Return a dictionary with the task IDs as keys and the done status as values"""
         return self._done

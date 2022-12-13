@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 class Processor(ABC):
     """
     Abstract class for processors
+
+    :param max_parallelism: Maximum number of tasks to execute in parallel
     """
 
-    def __init__(self, num_threads: int = 10):
-        self._num_threads = num_threads
+    def __init__(self, max_parallelism: int = 10):
+        self._max_parallelism = max_parallelism
 
     def process(
             self, tasks: list[Operator],
@@ -32,13 +34,14 @@ class Processor(ABC):
         :param tasks: List of tasks to process
         :param input_data: Input data
         :param output_data: Output data
+        :return: Output data of the tasks
         """
         raise NotImplementedError
 
 
 class DefaultProcessor(Processor):
     """
-    Processor that uses the default executor to process tasks
+    Default processor for tasks
     """
 
     def process(
@@ -47,13 +50,19 @@ class DefaultProcessor(Processor):
             input_data: dict[str, dict[str, InputDataObject]] = None,
             output_data: dict[str, OutputDataObject] = None
     ) -> dict[str, OutputDataObject]:
+        """
+        Process a list of tasks
+        :param tasks: List of tasks to process
+        :param input_data: Input data
+        :param output_data: Output data
+        :return: Output data of the tasks
+        :raises ValueError: If there are no tasks to process or if there are more tasks than the maximum parallelism
+        """
         if len(tasks) == 0:
             raise ValueError('No tasks to process')
 
-        if len(tasks) > self._num_threads:
-            logger.warning(
-                'The number of tasks is greater than the number of threads. This may cause performance issues.'
-            )
+        if len(tasks) > self._max_parallelism:
+            raise ValueError(f'Too many tasks to process. Max parallelism is {self._max_parallelism}')
 
         futures = {}
 
@@ -68,6 +77,7 @@ class DefaultProcessor(Processor):
         logger.info('Waiting for batch to complete')
         tasks[0].executor.wait(list(futures.values()))
 
+        # TODO: Handle exceptions
         for task in tasks:
             task.state = TaskState.SUCCESS
             logger.info(f'Task {task.task_id} completed successfully')

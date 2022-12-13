@@ -8,7 +8,6 @@ from lithops import FunctionExecutor
 from lithops.future import ResponseFuture
 from lithops.utils import FuturesList
 
-from dagium.data import DataObject
 from data import InputDataObject, OutputDataObject
 
 
@@ -26,9 +25,14 @@ class TaskState(Enum):
 
 class Operator(ABC):
     """
-    Abstract base class for operators. An operator is a task that can be executed in a DAG.
+    Abstract base class for operators
+
+    An operator is a task that can be executed in a DAG.
 
     :param task_id: Task ID
+    :param executor: Executor to use
+    :param input_data: Input data for the operator
+    :param output_data: Output data for the operator
     :param metadata: Metadata to pass to the operator
     :param args: Arguments to pass to the operator
     :param kwargs: Keyword arguments to pass to the operator
@@ -58,45 +62,51 @@ class Operator(ABC):
 
     @property
     def task_id(self) -> str:
-        """ Task ID """
+        """Return the task ID."""
         return self._task_id
 
     @property
     def executor(self) -> FunctionExecutor:
-        """ Executor """
+        """Return the executor."""
         return self._executor
 
     @property
     def parents(self) -> set[Operator]:
-        """ Parents of this operator """
+        """Return the parents of this operator."""
         return self._parents
 
     @property
     def children(self) -> set[Operator]:
-        """ Children of this operator """
+        """Return the children of this operator."""
         return self._children
 
     @property
     def input_data(self) -> dict[str, InputDataObject]:
-        """ Input data object """
+        """Return the input data."""
         return self._input_data
 
     @property
     def output_data(self) -> OutputDataObject:
-        """ Output data object """
+        """Return the output data."""
         return self._output_data
 
     @property
     def state(self) -> TaskState:
-        """ State of this operator """
+        """Return the state of the task."""
         return self._state
 
     @state.setter
     def state(self, value):
+        """Set the state of the task."""
         self._state = value
 
     def _set_relation(self, operator_or_operators: Operator | list[Operator], upstream: bool = False):
-        """ Set relation between this operator and another operator or list of operators. """
+        """
+        Set relation between this operator and another operator or list of operators
+
+        :param operator_or_operators: Operator or list of operators
+        :param upstream: Whether to set the relation as upstream or downstream
+        """
         if isinstance(operator_or_operators, Operator):
             operator_or_operators = [operator_or_operators]
 
@@ -109,19 +119,32 @@ class Operator(ABC):
                 operator.parents.add(self)
 
     def add_parent(self, operator: Operator | list[Operator]):
-        """ Add a parent to this operator. """
+        """
+        Add a parent to this operator.
+        :param operator: Operator or list of operators
+        """
         self._set_relation(operator, upstream=True)
 
     def add_child(self, operator: Operator | list[Operator]):
-        """ Add a child to this operator. """
+        """
+        Add a child to this operator.
+        :param operator: Operator or list of operators
+        """
         self._set_relation(operator, upstream=False)
 
+    # TODO: Remove this method
     def get_input_output(
             self,
-            input_data: dict[str, DataObject] = None,
-            output_data: DataObject = None
-    ) -> tuple[dict[str, DataObject], DataObject]:
-        """ Get input and output data objects. """
+            input_data: dict[str, InputDataObject] = None,
+            output_data: OutputDataObject = None
+    ) -> tuple[dict[str, InputDataObject], OutputDataObject]:
+        """
+        Get input and output data objects
+
+        :param input_data: Input data
+        :param output_data: Output data
+        :return: tuple of input and output data objects
+        """
         input_data, output_data = input_data or self._input_data, output_data or self._output_data
         if input_data is None:
             raise ValueError("Input data object is not set.")
@@ -136,25 +159,31 @@ class Operator(ABC):
             input_data: dict[str, InputDataObject] = None,
             output_data: OutputDataObject = None,
     ) -> ResponseFuture | FuturesList:
-        """ Execute the operator. """
+        """
+        Execute the operator and return a future object.
+
+        :param input_data: Input data
+        :param output_data: Output data
+        :return: the future object
+        """
         pass
 
-    def __lshift__(self, other: Operator | list[Operator]):
-        """ Overload the << operator to add a parent to this operator. """
+    def __lshift__(self, other: Operator | list[Operator]) -> Operator:
+        """Overload the << operator to add a parent to this operator."""
         self.add_parent(other)
         return other
 
-    def __rshift__(self, other: Operator | list[Operator]):
-        """ Overload the >> operator to add a child to this operator. """
+    def __rshift__(self, other: Operator | list[Operator]) -> Operator:
+        """Overload the >> operator to add a child to this operator."""
         self.add_child(other)
         return other
 
-    def __rrshift__(self, other: Operator | list[Operator]):
-        """ Overload the >> operator for lists of operators. """
+    def __rrshift__(self, other: Operator | list[Operator]) -> Operator:
+        """Overload the >> operator for lists of operator. """
         self.add_parent(other)
         return self
 
-    def __rlshift__(self, other: Operator | list[Operator]):
-        """ Overload the << operator for lists of operators. """
+    def __rlshift__(self, other: Operator | list[Operator]) -> Operator:
+        """Overload the << operator for lists of operators."""
         self.add_child(other)
         return self

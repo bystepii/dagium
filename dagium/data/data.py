@@ -8,7 +8,17 @@ from lithops.storage.utils import StorageNoSuchKeyError
 
 
 class DataObject(ABC):
-    """Base class for all data objects. """
+    """
+    Base class for all data objects.
+
+    Represents a data object that can be stored in a storage backend. It has associated with it a path,
+    a bucket, a reference to the storage backend and optional metadata.
+
+    :param bucket: Bucket where the data object is stored
+    :param path: Path where the data object is stored
+    :param storage: Storage backend where the data object is stored
+    :param metadata: Metadata associated with the data object
+    """
 
     def __init__(self, bucket: str, path: str, storage: Storage = None, metadata: dict[str, Any] = None):
         self._bucket = bucket
@@ -25,61 +35,89 @@ class DataObject(ABC):
 
     @property
     def bucket(self) -> str:
-        """ The bucket of this data object """
+        """Return the bucket where the data object is stored."""
         return self._bucket
 
     @property
     def path(self) -> str:
-        """ The path of this data object """
+        """Return the path where the data object is stored."""
         return self._path
 
     @property
     def storage(self) -> Storage:
-        """ The storage of this data object """
+        """Return the storage backend where the data object is stored."""
         return self._storage
 
     @property
     def metadata(self) -> dict[str, Any]:
-        """ The metadata of this data object """
+        """Return the metadata associated with the data object."""
         return self._metadata
 
     def get(self) -> str | bytes | TextIO | BinaryIO:
-        """ Get the data of this data object """
+        """Get the data object."""
         return self._storage.get_object(self._bucket, self._path)
 
     def put(self, data: str | bytes | TextIO | BinaryIO):
-        """ Put data in this data object """
+        """
+        Put the data object
+
+        :param data: Data to put
+        """
         self._storage.put_object(self._bucket, self._path, data)
         self._metadata['size'] = len(data) if isinstance(data, Sized) else 1
         self._metadata['type'] = type(data)
 
 
 class InputDataObject(DataObject):
-    """ Data object for input data """
+    """
+    Data object that represents input data for an operator.
+
+    :param bucket: Bucket where the data object is stored
+    :param path: Path where the data object is stored
+    :param storage: Storage backend where the data object is stored
+    :param metadata: Metadata associated with the data object
+    """
 
     def __init__(self, bucket: str, path: str, storage: Storage = None, metadata: dict[str, Any] = None):
         super().__init__(bucket, path, storage, metadata)
 
     def put(self, data: Any):
-        """ Put data in this data object """
+        """
+        Not implemented for input data objects.
+
+        :raises NotImplementedError: Always
+        """
         raise ValueError("Input data objects are read-only")
 
     def get(self) -> Any:
-        """ Get the data of this data object """
         return super().get()
 
 
 class OutputDataObject(DataObject):
-    """ Data object for output data """
+    """
+    Data object that represents output data for an operator.
+
+    :param bucket: Bucket where the data object is stored
+    :param path: Path where the data object is stored
+    :param storage: Storage backend where the data object is stored
+    :param metadata: Metadata associated with the data object
+    """
 
     def __init__(self, bucket: str, path: str, storage: Storage, metadata: dict[str, Any] = None):
         super().__init__(bucket, path, storage, metadata)
 
 
 class InMemoryInputDataObject(InputDataObject):
-    """ Data object for in memory data """
+    """
+    In-memory input data object.
 
-    def __init__(self, data: Any = None, metadata: dict[str, Any] = None):
+    Used to pass relatively small data objects to operators without having to store them in a storage backend.
+
+    :param data: Data to store
+    :param metadata: Metadata associated with the data object
+    """
+
+    def __init__(self, data: Any, metadata: dict[str, Any] = None):
         super().__init__("in_memory", "in_memory", None, metadata)
         self._data = data
         self._metadata = metadata or dict()
@@ -91,7 +129,9 @@ class InMemoryInputDataObject(InputDataObject):
 
 
 class DataObjectFactory:
-    """ Factory for data objects """
+    """
+    Factory class for creating data objects.
+    """
 
     @staticmethod
     def create_input_data_object(
@@ -102,7 +142,19 @@ class DataObjectFactory:
             metadata: dict[str, Any] = None,
             data_object: DataObject = None
     ) -> InputDataObject:
-        """ Create an input data object """
+        """
+        Create an input data object.
+
+        :param data: Data to store. If provided, the data object will be stored in memory
+                     and the other parameters will be ignored.
+        :param bucket: Bucket where the data object is stored
+        :param path: Path where the data object is stored
+        :param storage: Storage backend where the data object is stored
+        :param metadata: Metadata associated with the data object
+        :param data_object: Data object to use. If provided, the other parameters will be ignored.
+        :return: Input data object
+        :raises ValueError: If no data object is provided and no bucket or path is provided
+        """
         if data is not None:
             return InMemoryInputDataObject(data, metadata)
         elif bucket is not None and path is not None and storage is not None:
@@ -120,6 +172,17 @@ class DataObjectFactory:
             metadata: dict[str, Any] = None,
             data_object: DataObject = None
     ) -> OutputDataObject:
+        """
+        Create an output data object.
+
+        :param bucket: Bucket where the data object is stored
+        :param path: Path where the data object is stored
+        :param storage: Storage backend where the data object is stored
+        :param metadata: Metadata associated with the data object
+        :param data_object: Data object to use. If provided, the other parameters will be ignored.
+        :return: Output data object
+        :raises ValueError: If the parameters are invalid
+        """
         if bucket is not None and path is not None and storage is not None:
             return OutputDataObject(bucket, path, storage, metadata)
         elif data_object is not None:
