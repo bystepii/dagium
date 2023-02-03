@@ -1,10 +1,12 @@
-from typing import Any
+from __future__ import annotations
 
+from typing import Any, Callable, Dict
+
+from dagium import Future
 from lithops import FunctionExecutor
 from lithops.utils import FuturesList
 
 from dagium.operators.operator import Operator
-from data import InputDataObject, OutputDataObject
 
 
 class MapReduce(Operator):
@@ -16,7 +18,6 @@ class MapReduce(Operator):
     :param map_func: Function applied to each element
     :param reduce_func: Function applied to the results of the map function
     :param input_data: Input data for the operator
-    :param output_data: Output data for the operator
     :param metadata: Metadata to pass to the operator
     :param args: Arguments to pass to the operator
     :param kwargs: Keyword arguments to pass to the operator
@@ -26,10 +27,9 @@ class MapReduce(Operator):
             self,
             task_id: str,
             executor: FunctionExecutor,
-            map_func: callable,
-            reduce_func: callable,
-            input_data: InputDataObject = None,
-            output_data: OutputDataObject = None,
+            map_func: Callable[[Future], Any] | Callable[[Future, str], Any],
+            reduce_func: Callable,
+            input_data: dict[str, Future] | Future = None,
             metadata: dict[str, Any] = None,
             *args,
             **kwargs
@@ -38,7 +38,6 @@ class MapReduce(Operator):
             task_id,
             executor,
             input_data,
-            output_data,
             metadata,
             *args,
             **kwargs
@@ -49,21 +48,46 @@ class MapReduce(Operator):
     # TODO: Implement this, it's not working yet
     def __call__(
             self,
-            input_data: dict[str, InputDataObject] = None,
-            output_data: OutputDataObject = None,
+            input_data: Dict[str, Future] = None,
+            *args,
+            **kwargs
     ) -> FuturesList:
         """
         Execute the operator and return a future object.
 
         :param input_data: Input data
-        :param output_data: Output data
         :return: the future object
         """
-        input_data, output_data = super().get_input_output(input_data, output_data)
+
+        input_data = input_data or self._input_data
+
+        if isinstance(input_data, dict):
+            iterdata = [(v, k) for k, v in input_data.items()]
+        else:
+            iterdata = input_data
+
         return self._executor.map_reduce(
-            self._map_func,
-            {'input_data': input_data, 'output_data': output_data},
+            self._wrap(self._map_func, input_data),
+            iterdata,
             self._reduce_func,
             *self._args,
             **self._kwargs
         )
+
+    def _wrap(
+            self,
+            func: Callable[[Future], Any] | Callable[[Future, str], Any],
+            in_data: Dict[str, Future] | Future = None,
+    ) -> Callable[[Future], Any] | Callable[[str, Future], Any]:
+        """
+        Wrap a function to be executed in the operator
+
+        :param func: Function to wrap
+        :param in_data: Input data
+        :return: Wrapped function
+        """
+
+        def wrapped_func(input_data: Future, parend_id: str = None):
+            return func(input_data, parend_id)
+
+        return wrapped_func

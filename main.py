@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 import logging
 import pickle
+from typing import Dict
 
+from dagium import Future, InputData
 from lithops import Storage, LocalhostExecutor
 
 from dagium.dag import DAG
 from dagium.execution import DagExecutor
 from dagium.operators import CallAsync
-from data import InputDataObject, OutputDataObject, DataObjectFactory
 from operators import Map
 
 config = {'lithops': {'backend': 'localhost', 'storage': 'localhost'}}
@@ -17,24 +20,17 @@ logging.basicConfig(format=LOGGER_FORMAT, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def inc_func(input_data: dict[str, InputDataObject], output_data: OutputDataObject):
-    print(f'This function has the following parent tasks: {input_data.keys()}')
-    if len(input_data) == 1:
-        in_data = input_data.popitem()[1]
-        data = in_data.get()
-        print(f'Input data is {data}')
-        if in_data.metadata.get('type') == int:
-            output_data.put(pickle.dumps(data + 1))
-        else:
-            data = pickle.loads(data)
-            output_data.put(pickle.dumps(data + 1))
-    else:
-        raise ValueError('This function should only have one parent task')
+def inc_func(input_data: Dict[str, Future]):
+    logger.info(f'Executing inc_func with input data: {input_data}')
+    sum = 0
+    for key, value in input_data.items():
+        sum += value.result()
+    return sum
 
 
-def map_func(input_data: dict[str, InputDataObject], output_data: OutputDataObject):
-    print(f'Executing another_function with input data: {input_data}')
-    pass
+def map_func(input_data: Future):
+    logger.info(f'Executing map_func with input data: {input_data}')
+    return [input_data.result() + 1, input_data.result() + 2]
 
 
 # Press the green button in the gutter to run the script.
@@ -47,44 +43,40 @@ if __name__ == '__main__':
         'task1',
         executor=ex,
         func=inc_func,
-        input_data=DataObjectFactory.create_input_data_object(data=1),
-        output_data=OutputDataObject('my_bucket', 'tmp/output1.txt', storage)
+        input_data=InputData(1)
     )
     task2 = CallAsync(
         'task2',
         executor=ex,
         func=inc_func,
-        output_data=OutputDataObject('my_bucket', 'tmp/output2.txt', storage)
     )
     task3 = CallAsync(
         'task3',
         executor=ex,
         func=inc_func,
-        output_data=OutputDataObject('my_bucket', 'tmp/output3.txt', storage)
     )
     task4 = CallAsync(
         'task4',
         executor=ex,
         func=inc_func,
-        output_data=OutputDataObject('my_bucket', 'tmp/output4.txt', storage)
     )
     task5 = Map(
         'task5',
         executor=ex,
         map_func=map_func,
-        output_data=OutputDataObject('my_bucket', 'tmp/output5.txt', storage)
     )
     task6 = CallAsync(
         'task6',
         executor=ex,
         func=inc_func,
-        output_data=OutputDataObject('my_bucket', 'tmp/output6.txt', storage)
     )
 
     task1 >> task2 >> [task3, task4] >> task5 >> task6
 
     dag.add_tasks([task1, task2, task3, task4, task5, task6])
-    executor = DagExecutor(dag, max_parallelism=10)
-    results = executor.execute()
+    executor = DagExecutor(dag)
+    futures = executor.execute()
+    fexec = LocalhostExecutor()
+    results = fexec.get_result(futures['task6'])
     print('Tasks completed')
     print(results)

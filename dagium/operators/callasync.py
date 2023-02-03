@@ -1,10 +1,11 @@
-from typing import Any
+from __future__ import annotations
 
+from typing import Any, Dict, Callable, Union
+
+from dagium import Future
+from dagium.operators.operator import Operator
 from lithops import FunctionExecutor
 from lithops.future import ResponseFuture
-
-from dagium.operators.operator import Operator
-from data import InputDataObject, OutputDataObject
 
 
 class CallAsync(Operator):
@@ -15,7 +16,6 @@ class CallAsync(Operator):
     :param executor: Executor to use
     :param func: Function to call
     :param input_data: Input data for the operator
-    :param output_data: Output data for the operator
     :param metadata: Metadata to pass to the operator
     :param args: Arguments to pass to the operator
     :param kwargs: Keyword arguments to pass to the operator
@@ -25,10 +25,9 @@ class CallAsync(Operator):
             self,
             task_id: str,
             executor: FunctionExecutor,
-            func: callable,
-            input_data: InputDataObject = None,
-            output_data: OutputDataObject = None,
-            metadata: dict[str, Any] = None,
+            func: Callable[[Dict[str, Future]], Any],
+            input_data: Dict[str, Future] | Future = None,
+            metadata: Dict[str, Any] = None,
             *args,
             **kwargs
     ):
@@ -36,7 +35,6 @@ class CallAsync(Operator):
             task_id,
             executor,
             input_data,
-            output_data,
             metadata,
             *args,
             **kwargs
@@ -45,20 +43,36 @@ class CallAsync(Operator):
 
     def __call__(
             self,
-            input_data: dict[str, InputDataObject] = None,
-            output_data: OutputDataObject = None,
+            input_data: Dict[str, Future] | Future = None,
+            *args,
+            **kwargs
     ) -> ResponseFuture:
         """
         Execute the operator and return a future object.
 
         :param input_data: Input data
-        :param output_data: Output data
         :return: the future object
         """
-        input_data, output_data = super().get_input_output(input_data, output_data)
         return self._executor.call_async(
-            self._func,
-            {'input_data': input_data, 'output_data': output_data},
+            self._wrap(self._func, input_data or self._input_data),
+            {'input_data': input_data or self._input_data},
             *self._args,
             **self._kwargs
         )
+
+    def _wrap(
+            self,
+            func: Callable[[Union[Dict[str, Future], Future]], Any],
+            in_data: Dict[str, Future] | Future
+    ) -> Callable:
+        """
+        Wrap a function to be executed in the operator
+
+        :param func: Function to wrap
+        :param in_data: Input data
+        :return: Wrapped function
+        """
+        def wrapped_func(input_data: Dict[str, Future] | Future) -> Any:
+            return func(input_data)
+
+        return wrapped_func

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import logging
-from abc import ABC
+from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor, wait
+from typing import List, Dict, Callable, Collection, Sequence
 
+from dagium import Future, MAX_CONCURRENCY
+from execution import Executor
 from lithops.future import ResponseFuture
 from lithops.utils import FuturesList
 
-from data import InputDataObject, OutputDataObject
 from operators import Operator
 from operators.operator import TaskState
 
@@ -16,85 +19,114 @@ logger = logging.getLogger(__name__)
 class Processor(ABC):
     """
     Abstract class for processors
-
-    :param max_parallelism: Maximum number of tasks to execute in parallel
     """
 
-    def __init__(self, max_parallelism: int = 10):
-        self._max_parallelism = max_parallelism
+    def __init__(self):
+        pass
 
+    @abstractmethod
     def process(
-            self, tasks: list[Operator],
-            input_data: dict[str, dict[str, InputDataObject]] = None,
-            output_data: dict[str, OutputDataObject] = None
-    ) -> dict[str, OutputDataObject]:
+            self,
+            tasks: Sequence[Operator],
+            executor: Executor,
+            input_data: Dict[str, Dict[str, Future]] = None,
+            on_future_done: Callable[[Operator, ResponseFuture], None] = None,
+    ) -> dict[str, Future]:
         """
         Process a list of tasks
 
+        :param executor:
         :param tasks: List of tasks to process
+        :param executor: Executor to use
         :param input_data: Input data
-        :param output_data: Output data
+        :param on_future_done: Callback to execute every time a future is done
         :return: Output data of the tasks
         """
-        raise NotImplementedError
+        pass
 
 
-class DefaultProcessor(Processor):
+class ThreadPoolProcessor(Processor):
     """
-    Default processor for tasks
+    Processor that uses a thread pool to execute tasks
     """
+
+    def __init__(self, max_concurrency=MAX_CONCURRENCY):
+        super().__init__()
+        self._max_concurrency = max_concurrency
+        self._pool = ThreadPoolExecutor(max_workers=max_concurrency)
+        self._futures: Dict[str, Future] = {}
 
     def process(
             self,
-            tasks: list[Operator],
-            input_data: dict[str, dict[str, InputDataObject]] = None,
-            output_data: dict[str, OutputDataObject] = None
-    ) -> dict[str, OutputDataObject]:
+            tasks: Sequence[Operator],
+            executor: Executor,
+            input_data: Dict[str, Dict[str, Future]] = None,
+            on_future_done: Callable[[Operator, ResponseFuture], None] = None,
+    ) -> dict[str, Future]:
         """
         Process a list of tasks
+        :param executor:
         :param tasks: List of tasks to process
+        :param executor: Executor to use
         :param input_data: Input data
-        :param output_data: Output data
-        :return: Output data of the tasks
+        :param on_future_done: Callback to execute every time a future is done
+        :return: Futures of the tasks
         :raises ValueError: If there are no tasks to process or if there are more tasks than the maximum parallelism
         """
         if len(tasks) == 0:
             raise ValueError('No tasks to process')
 
-        if len(tasks) > self._max_parallelism:
-            raise ValueError(f'Too many tasks to process. Max parallelism is {self._max_parallelism}')
+        if len(tasks) > self._max_concurrency:
+            raise ValueError(f'Too many tasks to process. Max concurrency is {self._max_concurrency}')
 
-        futures = {}
+        ex_futures = []
 
         for task in tasks:
-            futures[task] = self._process_task(
+            logger.info(f"Submitting task {task.task_id}")
+            task.state = TaskState.RUNNING
+            ex_futures.append(self._pool.submit(
+                self._process_task,
                 task,
+                executor,
                 input_data[task.task_id] if input_data and task.task_id in input_data else None,
-                output_data[task.task_id] if output_data and task.task_id in output_data else None
-            )
+                on_future_done
+            ))
 
-        # wait for all tasks to complete
-        logger.info('Waiting for batch to complete')
-        tasks[0].executor.wait(list(futures.values()))
+        wait(ex_futures)
 
-        # TODO: Handle exceptions
-        for task in tasks:
-            task.state = TaskState.SUCCESS
-            logger.info(f'Task {task.task_id} completed successfully')
+        return self._futures
 
-        return {task.task_id: task.output_data for task in tasks}
-
-    @staticmethod
     def _process_task(
+            self,
             task: Operator,
-            input_data: InputDataObject = None,
-            output_data: OutputDataObject = None
-    ) -> ResponseFuture | FuturesList:
+            executor: Executor,
+            input_data: Dict[str, Future] = None,
+            on_future_done: Callable[[Operator, ResponseFuture], None] = None,
+    ) -> None:
         """
         Process a task
 
         :param task: Task to process
+        :param input_data: Input data
+        :param on_future_done: Callback to execute every time a future is done
         """
-        logger.info(f"Submitting task {task.task_id}")
-        task.state = TaskState.RUNNING
-        return task(input_data, output_data)
+        future = executor.execute(
+            task,
+            input_data[task.task_id] if input_data and task.task_id in input_data else None
+        )
+
+        self._futures[task.task_id] = future
+
+        task.state = TaskState.SUCCESS
+        if isinstance(future, FuturesList) or isinstance(future, list):
+            for f in future:
+                if f.error():
+                    task.state = TaskState.FAILED
+                    break
+        else:
+            if future.error():
+                task.state = TaskState.FAILED
+
+        if on_future_done:
+            on_future_done(task, future)
+        

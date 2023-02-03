@@ -1,10 +1,13 @@
 import logging
+from typing import Dict, Set, List
 
+from dagium import Future, MAX_CONCURRENCY
 from dagium.dag import DAG
-from dagium.execution.context import Context
-from dagium.execution.processors import Processor, DefaultProcessor
+from dagium.execution.processors import Processor, ThreadPoolProcessor
 from dagium.operators import TaskState
-from data import OutputDataObject, DataObjectFactory
+from execution import Executor, CallableExecutor, Selector, AllSelector
+from execution.selectors import MaxConcurrencySelector
+from operators import Operator
 
 logger = logging.getLogger(__name__)
 
@@ -14,20 +17,31 @@ class DagExecutor:
     Executor class that is responsible for executing the DAG
 
     :param dag: DAG to execute
-    :param max_parallelism: Maximum number of tasks to execute in parallel, defaults to 10
+    :param max_concurrency: Maximum number of tasks to execute in parallel, defaults to 10
     :param processor: Processor to use for executing tasks, defaults to DefaultProcessor
     """
 
-    def __init__(self, dag: DAG, max_parallelism: int = 10, processor: Processor = DefaultProcessor()):
+    def __init__(
+            self,
+            dag: DAG,
+            max_concurrency=MAX_CONCURRENCY,
+            processor: Processor = None,
+            executor: Executor = CallableExecutor,
+            selector: Selector = None,
+    ):
         self._dag = dag
-        self._max_parallelism = max_parallelism
-        self._processor = processor
-        self._context = Context([task.task_id for task in dag.tasks])
-        self._config = {'lithops': {'backend': 'localhost', 'storage': 'localhost'}}
-        self._sem = None
-        self._num_final_tasks = None
+        self._max_concurrency = max_concurrency
+        self._processor = processor or ThreadPoolProcessor(max_concurrency)
+        self._executor = executor
+        self._selector = selector or MaxConcurrencySelector(max_concurrency)
 
-    def execute(self) -> dict[str, OutputDataObject]:
+        self._futures: Dict[str, Future] = dict()
+        self._num_final_tasks = 0
+        self._dependence_free_tasks: List[Operator] = list()
+        self._running_tasks: List[Operator] = list()
+        self._finished_tasks: Set[Operator] = set()
+
+    def execute(self) -> Dict[str, Future]:
         """
         Execute the DAG
 
@@ -39,16 +53,14 @@ class DagExecutor:
         logger.info(f'DAG {self._dag.dag_id} has {self._num_final_tasks} final tasks')
 
         # Start by executing the root tasks
-        dependence_free_tasks = self._dag.root_tasks
-        running_tasks = set()
-        finished_tasks = set()
+        self._dependence_free_tasks = list(self._dag.root_tasks)
+        self._running_tasks = list()
+        self._finished_tasks = set()
 
         # Execute tasks until all tasks have been executed
-        while dependence_free_tasks:
-            # Construct the batch of tasks to execute
-            # The batch size is the minimum of the number of dependence free tasks and the maximum parallelism
-            batch_length = min(len(dependence_free_tasks), max(0, self._max_parallelism - len(running_tasks)))
-            batch = list(dependence_free_tasks)[:batch_length]
+        while self._dependence_free_tasks or self._running_tasks:
+            # Select the tasks to execute
+            batch = self._selector.select(self._running_tasks, self._dependence_free_tasks)
 
             # Construct the input data for the batch
             input_data = {}
@@ -58,32 +70,39 @@ class DagExecutor:
                 # passed as a dictionary with the parent task ID as the key and the output data as the value
                 if task.parents:
                     input_data[task.task_id] = {
-                        parent.task_id: DataObjectFactory.create_input_data_object(
-                            data_object=self._context.output_data[parent.task_id]
-                        ) for parent in task.parents
+                        parent.task_id: self._futures[parent.task_id] for parent in task.parents
                     }
                 else:
                     input_data[task.task_id] = task.input_data
 
             # Add the batch to the running tasks
-            running_tasks |= set(batch)
+            self._running_tasks |= batch
 
             # Call the processor to execute the batch
-            self._processor.process(batch, input_data, {
-                task: output_data for task, output_data in self._context.output_data.items() if task in batch
-            })
+            futures = self._processor.process(batch, self._executor, input_data, lambda t, f: self.on_future_done(t, f))
 
-            # Remove the batch from the running tasks and add it to the finished tasks
-            running_tasks -= set(batch)
-            dependence_free_tasks -= set(batch)
-            finished_tasks |= set(batch)
+            self._running_tasks -= batch
+            self._dependence_free_tasks -= batch
+            self._finished_tasks |= batch
 
-            # Check if any of the finished tasks have children that are now dependence free
-            # If so, add them to the dependence free tasks
             for task in batch:
-                self._context.output_data[task.task_id] = task.output_data
+                self._futures[task.task_id] = futures[task.task_id]
                 for child in task.children:
-                    if child.parents.issubset(finished_tasks):
-                        dependence_free_tasks.add(child)
+                    if child.parents.issubset(self._finished_tasks):
+                        self._dependence_free_tasks.append(child)
 
-        return self._context.output_data
+        return self._futures
+
+    def on_future_done(self, task: Operator, future: Future):
+        """
+        Callback function that is called when a task has been executed
+
+        :param task: Task that has been executed
+        :param future: Future object that contains the output data of the task
+        """
+        self._running_tasks.remove(task)
+        self._dependence_free_tasks.remove(task)
+        self._finished_tasks.add(task)
+        for child in task.children:
+            if child.parents.issubset(self._finished_tasks):
+                self._dependence_free_tasks.append(child)
