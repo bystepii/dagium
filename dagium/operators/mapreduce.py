@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from dagium import Future
 from lithops import FunctionExecutor
@@ -27,10 +27,10 @@ class MapReduce(Operator):
             self,
             task_id: str,
             executor: FunctionExecutor,
-            map_func: Callable[[Future], Any] | Callable[[Future, str], Any],
+            map_func: Callable[[Future, ...], Any] | Callable[[Future, str, ...], Any],
             reduce_func: Callable,
-            input_data: dict[str, Future] | Future = None,
-            metadata: dict[str, Any] = None,
+            input_data: Optional[Dict[str, Future] | Future] = None,
+            metadata: Optional[Dict[str, Any]] = None,
             *args,
             **kwargs
     ):
@@ -76,8 +76,8 @@ class MapReduce(Operator):
 
     def _wrap(
             self,
-            func: Callable[[Future], Any] | Callable[[Future, str], Any],
-            in_data: Dict[str, Future] | Future = None,
+            func: Callable[[Future, ...], Any] | Callable[[Future, str, ...], Any],
+            in_data: Optional[Dict[str, Future]] = None,
     ) -> Callable[[Future], Any] | Callable[[str, Future], Any]:
         """
         Wrap a function to be executed in the operator
@@ -87,7 +87,7 @@ class MapReduce(Operator):
         :return: Wrapped function
         """
 
-        def wrapped_func(input_data: Future, parend_id: str = None):
-            return func(input_data, parend_id)
+        def wrapped_func(input_data: Future, parent_id: Optional[str] = None):
+            return func(input_data, parent_id)
 
         return wrapped_func

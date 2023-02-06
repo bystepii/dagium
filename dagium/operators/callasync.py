@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Callable, Union
+from typing import Any, Dict, Callable, Union, Optional
 
 from dagium import Future
 from dagium.operators.operator import Operator
@@ -25,9 +25,9 @@ class CallAsync(Operator):
             self,
             task_id: str,
             executor: FunctionExecutor,
-            func: Callable[[Dict[str, Future]], Any],
-            input_data: Dict[str, Future] | Future = None,
-            metadata: Dict[str, Any] = None,
+            func: Callable[[Dict[str, Future], ...], Any],
+            input_data: Optional[Dict[str, Future] | Future] = None,
+            metadata: Optional[Dict[str, Any]] = None,
             *args,
             **kwargs
     ):
@@ -43,7 +43,7 @@ class CallAsync(Operator):
 
     def __call__(
             self,
-            input_data: Dict[str, Future] | Future = None,
+            input_data: Dict[str, Future] = None,
             *args,
             **kwargs
     ) -> ResponseFuture:
@@ -62,8 +62,8 @@ class CallAsync(Operator):
 
     def _wrap(
             self,
-            func: Callable[[Union[Dict[str, Future], Future]], Any],
-            in_data: Dict[str, Future] | Future
+            func: Callable[[Dict[str, Future], ...], Any],
+            in_data: Dict[str, Future]
     ) -> Callable:
         """
         Wrap a function to be executed in the operator
@@ -72,7 +72,7 @@ class CallAsync(Operator):
         :param in_data: Input data
         :return: Wrapped function
         """
-        def wrapped_func(input_data: Dict[str, Future] | Future) -> Any:
+        def wrapped_func(input_data: Dict[str, Future]) -> Any:
             return func(input_data)
 
         return wrapped_func

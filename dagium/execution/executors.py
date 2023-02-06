@@ -1,5 +1,5 @@
 from abc import abstractmethod, ABC
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from dagium import Future
 from operators import Operator
@@ -17,7 +17,7 @@ class Executor(ABC):
     def execute(
             self,
             task: Operator,
-            input_data: Dict[str, Future] = None,
+            input_data: Optional[Dict[str, Future]] = None,
             *args,
             **kwargs
     ) -> Future:
@@ -42,7 +42,7 @@ class CallableExecutor(Executor):
     def execute(
             self,
             task: Operator,
-            input_data: Dict[str, Future] = None,
+            input_data: Optional[Dict[str, Future]] = None,
             *args,
             **kwargs
     ) -> Future:

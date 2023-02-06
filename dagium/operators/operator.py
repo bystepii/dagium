@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from abc import abstractmethod, ABC
 from enum import Enum
-from typing import Any, Dict, Set, List
+from typing import Any, Dict, Set, List, Optional
 
-from dagium import Future
+from dagium import Future, LithopsFuture
 
 from lithops import FunctionExecutor
 
@@ -39,14 +39,15 @@ class Operator(ABC):
             self,
             task_id: str,
             executor: FunctionExecutor,
-            input_data: Dict[str, Future] | Future = None,
-            metadata: Dict[str, Any] = None,
+            input_data: Optional[Dict[str, Future] | Future] = None,
+            metadata: Optional[Dict[str, Any]] = None,
             *args,
             **kwargs
     ):
         self._task_id = task_id
         self._executor = executor
-        self._input_data = input_data if isinstance(input_data, dict) else {'root': input_data}
+        self._input_data = input_data if isinstance(input_data, dict)\
+            else {'root': input_data} if input_data else dict()
         self._metadata = metadata or dict()
         self._args = args
         self._kwargs = kwargs
@@ -128,7 +129,7 @@ class Operator(ABC):
             input_data: Dict[str, Future] = None,
             *args,
             **kwargs
-    ) -> Future:
+    ) -> LithopsFuture:
         """
         Execute the operator and return a future object.
 
@@ -137,12 +138,12 @@ class Operator(ABC):
         """
         pass
 
-    def __lshift__(self, other: Operator | List[Operator]) -> Operator:
+    def __lshift__(self, other: Operator | List[Operator]) -> Operator | List[Operator]:
         """Overload the << operator to add a parent to this operator."""
         self.add_parent(other)
         return other
 
-    def __rshift__(self, other: Operator | List[Operator]) -> Operator:
+    def __rshift__(self, other: Operator | List[Operator]) -> Operator | List[Operator]:
         """Overload the >> operator to add a child to this operator."""
         self.add_child(other)
         return other

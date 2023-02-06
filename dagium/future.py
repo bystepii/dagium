@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Union
 
 from lithops.future import ResponseFuture
 from lithops.utils import FuturesList
 
+LithopsFuture = Union[ResponseFuture, FuturesList, list[ResponseFuture]]
+
 
 class Future:
-    def __init__(self, future: ResponseFuture | FuturesList | list[ResponseFuture] | InputData):
+    def __init__(self, future: LithopsFuture | InputData):
         self._future = future
 
     def result(self) -> Any:
-        if isinstance(self._future, ResponseFuture) or isinstance(self._future, InputData):
+        if isinstance(self._future, (ResponseFuture, InputData)):
             return self._future.result()
         elif isinstance(self._future, FuturesList):
             return self._future.get_result()

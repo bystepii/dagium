@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, Callable, Union, Dict
+from typing import Any, Callable, Union, Dict, Optional
 
 from dagium import Future
 from lithops import FunctionExecutor
@@ -27,9 +27,9 @@ class Map(Operator):
             self,
             task_id: str,
             executor: FunctionExecutor,
-            map_func: Callable[[Future], Any] | Callable[[Future, str], Any],
-            input_data: Dict[str, Future] | Future = None,
-            metadata: Dict[str, Any] = None,
+            map_func: Callable[[Future, ...], Any] | Callable[[Future, str, ...], Any],
+            input_data: Optional[Dict[str, Future] | Future] = None,
+            metadata: Optional[Dict[str, Any]] = None,
             *args,
             **kwargs
     ):
@@ -55,17 +55,6 @@ class Map(Operator):
         :param input_data: Input data
         :return: the future object
         """
-        # outputs = {
-        # k: DataObjectFactory.create_output_data_object(
-        # output_data.bucket, output_data.path + '_' + k,
-        # output_data.storage,
-        #    output_data.metadata
-        # )
-        #    for k in input_data.keys()
-        # }
-        # iterdata = [{'input_data': input_data[i], 'output_data': outputs[i]} for i in input_data.keys()]
-
-        sig = inspect.signature(self._map_func)
 
         input_data = input_data or self._input_data
 
@@ -83,8 +72,8 @@ class Map(Operator):
 
     def _wrap(
             self,
-            func: Callable[[Future], Any] | Callable[[Future, str], Any],
-            in_data: Dict[str, Future] | Future = None,
+            func: Callable[[Future, ...], Any] | Callable[[Future, str, ...], Any],
+            in_data: Optional[Dict[str, Future]] = None,
     ) -> Callable[[Future], Any] | Callable[[str, Future], Any]:
         """
         Wrap a function to be executed in the operator
@@ -94,7 +83,7 @@ class Map(Operator):
         :return: Wrapped function
         """
 
-        def wrapped_func(input_data: Future, parend_id: str = None):
-            return func(input_data, parend_id)
+        def wrapped_func(input_data: Future, parent_id: Optional[str] = None):
+            return func(input_data, parent_id)
 
         return wrapped_func
