@@ -26,7 +26,7 @@ class DagExecutor:
             dag: DAG,
             max_concurrency=MAX_CONCURRENCY,
             processor: Processor = None,
-            executor: Executor = CallableExecutor,
+            executor: Executor = CallableExecutor(),
             selector: Selector = None,
     ):
         self._dag = dag
@@ -53,14 +53,14 @@ class DagExecutor:
         logger.info(f'DAG {self._dag.dag_id} has {self._num_final_tasks} final tasks')
 
         # Start by executing the root tasks
-        self._dependence_free_tasks = list(self._dag.root_tasks)
-        self._running_tasks = list()
+        self._dependence_free_tasks = set(self._dag.root_tasks)
+        self._running_tasks = set()
         self._finished_tasks = set()
 
         # Execute tasks until all tasks have been executed
         while self._dependence_free_tasks or self._running_tasks:
             # Select the tasks to execute
-            batch = self._selector.select(self._running_tasks, self._dependence_free_tasks)
+            batch = self._selector.select(list(self._running_tasks), list(self._dependence_free_tasks))
 
             # Construct the input data for the batch
             input_data = {}
@@ -76,20 +76,21 @@ class DagExecutor:
                     input_data[task.task_id] = task.input_data
 
             # Add the batch to the running tasks
-            self._running_tasks |= batch
+            set_batch = set(batch)
+            self._running_tasks |= set_batch
 
             # Call the processor to execute the batch
-            futures = self._processor.process(batch, self._executor, input_data, lambda t, f: self.on_future_done(t, f))
+            futures = self._processor.process(batch, self._executor, input_data)
 
-            self._running_tasks -= batch
-            self._dependence_free_tasks -= batch
-            self._finished_tasks |= batch
+            self._running_tasks -= set_batch
+            self._dependence_free_tasks -= set_batch
+            self._finished_tasks |= set_batch
 
             for task in batch:
                 self._futures[task.task_id] = futures[task.task_id]
                 for child in task.children:
                     if child.parents.issubset(self._finished_tasks):
-                        self._dependence_free_tasks.append(child)
+                        self._dependence_free_tasks.add(child)
 
         return self._futures
 

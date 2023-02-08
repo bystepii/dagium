@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABC
 from typing import List, Dict, Optional
 
-from dagium import Future
+from dagium import Future, LithopsFuture
 from operators import Operator
 
 
@@ -55,4 +55,4 @@ class CallableExecutor(Executor):
         """
         future = task(input_data, *args, **kwargs)
         task.executor.wait(future)
-        return future
+        return Future(future)

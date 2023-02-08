@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import logging
-import pickle
 from typing import Dict
 
 from dagium import Future, InputData
 from lithops import Storage, LocalhostExecutor
 
-from dagium.dag import DAG
-from dagium.execution import DagExecutor
+from dagium.dag import DAG, DagExecutor
 from dagium.operators import CallAsync
 from operators import Map
 
@@ -20,15 +18,15 @@ logging.basicConfig(format=LOGGER_FORMAT, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def inc_func(input_data: Dict[str, Future]):
+def inc_func(input_data: Dict[str, Future], *args, **kwargs):
     logger.info(f'Executing inc_func with input data: {input_data}')
-    sum = 0
+    s = 0
     for key, value in input_data.items():
-        sum += value.result()
-    return sum
+        s += value.result()
+    return s
 
 
-def map_func(input_data: Future):
+def map_func(input_data: Future, *args, **kwargs):
     logger.info(f'Executing map_func with input data: {input_data}')
     return [input_data.result() + 1, input_data.result() + 2]
 
@@ -77,6 +75,6 @@ if __name__ == '__main__':
     executor = DagExecutor(dag)
     futures = executor.execute()
     fexec = LocalhostExecutor()
-    results = fexec.get_result(futures['task6'])
+    result = futures['task6'].result()
     print('Tasks completed')
-    print(results)
+    print(result)

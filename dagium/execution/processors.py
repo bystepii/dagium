@@ -5,10 +5,8 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import List, Dict, Callable, Collection, Sequence
 
-from dagium import Future, MAX_CONCURRENCY
-from execution import Executor
-from lithops.future import ResponseFuture
-from lithops.utils import FuturesList
+from dagium import Future, MAX_CONCURRENCY, LithopsFuture
+from dagium.execution.executors import Executor
 
 from operators import Operator
 from operators.operator import TaskState
@@ -30,7 +28,7 @@ class Processor(ABC):
             tasks: Sequence[Operator],
             executor: Executor,
             input_data: Dict[str, Dict[str, Future]] = None,
-            on_future_done: Callable[[Operator, ResponseFuture], None] = None,
+            on_future_done: Callable[[Operator, Future], None] = None,
     ) -> dict[str, Future]:
         """
         Process a list of tasks
@@ -54,14 +52,13 @@ class ThreadPoolProcessor(Processor):
         super().__init__()
         self._max_concurrency = max_concurrency
         self._pool = ThreadPoolExecutor(max_workers=max_concurrency)
-        self._futures: Dict[str, Future] = {}
 
     def process(
             self,
             tasks: Sequence[Operator],
             executor: Executor,
             input_data: Dict[str, Dict[str, Future]] = None,
-            on_future_done: Callable[[Operator, ResponseFuture], None] = None,
+            on_future_done: Callable[[Operator, Future], None] = None,
     ) -> dict[str, Future]:
         """
         Process a list of tasks
@@ -79,54 +76,43 @@ class ThreadPoolProcessor(Processor):
         if len(tasks) > self._max_concurrency:
             raise ValueError(f'Too many tasks to process. Max concurrency is {self._max_concurrency}')
 
-        ex_futures = []
+        ex_futures = {}
 
         for task in tasks:
             logger.info(f"Submitting task {task.task_id}")
             task.state = TaskState.RUNNING
-            ex_futures.append(self._pool.submit(
-                self._process_task,
-                task,
-                executor,
-                input_data[task.task_id] if input_data and task.task_id in input_data else None,
-                on_future_done
-            ))
+            ex_futures[task.task_id] = self._pool.submit(
+                lambda: _process_task(
+                    task,
+                    executor,
+                    input_data[task.task_id] if input_data and task.task_id in input_data else None,
+                    on_future_done
+                )
+            )
 
-        wait(ex_futures)
+        wait(ex_futures.values())
 
-        return self._futures
+        return {task_id: ex_future.result() for task_id, ex_future in ex_futures.items()}
 
-    def _process_task(
-            self,
-            task: Operator,
-            executor: Executor,
-            input_data: Dict[str, Future] = None,
-            on_future_done: Callable[[Operator, ResponseFuture], None] = None,
-    ) -> None:
-        """
-        Process a task
 
-        :param task: Task to process
-        :param input_data: Input data
-        :param on_future_done: Callback to execute every time a future is done
-        """
-        future = executor.execute(
-            task,
-            input_data[task.task_id] if input_data and task.task_id in input_data else None
-        )
+def _process_task(
+        task: Operator,
+        executor: Executor,
+        input_data: Dict[str, Future] = None,
+        on_future_done: Callable[[Operator, Future], None] = None,
+) -> Future:
+    """
+    Process a task
 
-        self._futures[task.task_id] = future
+    :param task: Task to process
+    :param input_data: Input data
+    :param on_future_done: Callback to execute every time a future is done
+    """
+    future = executor.execute(task, input_data)
 
-        task.state = TaskState.SUCCESS
-        if isinstance(future, FuturesList) or isinstance(future, list):
-            for f in future:
-                if f.error():
-                    task.state = TaskState.FAILED
-                    break
-        else:
-            if future.error():
-                task.state = TaskState.FAILED
+    task.state = TaskState.FAILED if future.error() else TaskState.SUCCESS
 
-        if on_future_done:
-            on_future_done(task, future)
-        
+    if on_future_done:
+        on_future_done(task, future)
+
+    return future

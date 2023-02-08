@@ -55,7 +55,7 @@ class CallAsync(Operator):
         """
         return self._executor.call_async(
             self._wrap(self._func, input_data or self._input_data),
-            {'input_data': input_data or self._input_data},
+            {'input_data': input_data or self._input_data, 'args': args, 'kwargs': kwargs},
             *self._args,
             **self._kwargs
         )
@@ -72,7 +72,7 @@ class CallAsync(Operator):
         :param in_data: Input data
         :return: Wrapped function
         """
-        def wrapped_func(input_data: Dict[str, Future]) -> Any:
-            return func(input_data)
+        def wrapped_func(input_data: Dict[str, Future], *args, **kwargs) -> Any:
+            return func(input_data, *args, **kwargs)
 
         return wrapped_func

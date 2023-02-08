@@ -87,7 +87,7 @@ class MapReduce(Operator):
         :return: Wrapped function
         """
 
-        def wrapped_func(input_data: Future, parent_id: Optional[str] = None):
-            return func(input_data, parent_id)
+        def wrapped_func(input_data: Future, parent_id: Optional[str] = None, *args, **kwargs) -> Any:
+            return func(input_data, parent_id, *args, **kwargs)
 
         return wrapped_func
