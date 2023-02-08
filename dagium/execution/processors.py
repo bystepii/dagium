@@ -42,6 +42,9 @@ class Processor(ABC):
         """
         pass
 
+    def shutdown(self):
+        pass
+
 
 class ThreadPoolProcessor(Processor):
     """
@@ -93,6 +96,9 @@ class ThreadPoolProcessor(Processor):
         wait(ex_futures.values())
 
         return {task_id: ex_future.result() for task_id, ex_future in ex_futures.items()}
+
+    def shutdown(self):
+        self._pool.shutdown()
 
 
 def _process_task(

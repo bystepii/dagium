@@ -58,10 +58,7 @@ class Map(Operator):
 
         input_data = input_data or self._input_data
 
-        if isinstance(input_data, dict):
-            iterdata = [(v, k) for k, v in input_data.items()]
-        else:
-            iterdata = input_data
+        iterdata = [(v, k) for k, v in input_data.items()]
 
         return self._executor.map(
             self._wrap(self._map_func, input_data),

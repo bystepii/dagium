@@ -20,15 +20,15 @@ logger = logging.getLogger(__name__)
 
 def inc_func(input_data: Dict[str, Future], *args, **kwargs):
     logger.info(f'Executing inc_func with input data: {input_data}')
-    s = 0
-    for key, value in input_data.items():
-        s += value.result()
-    return s
+    val = list(input_data.values())[0].result()
+    if isinstance(val, list):
+        return [(v1 + 1, v2 + 1) for v1, v2 in val]
+    return val + 1
 
 
 def map_func(input_data: Future, *args, **kwargs):
     logger.info(f'Executing map_func with input data: {input_data}')
-    return [input_data.result() + 1, input_data.result() + 2]
+    return input_data.result() + 1, input_data.result() + 2
 
 
 # Press the green button in the gutter to run the script.
@@ -74,7 +74,8 @@ if __name__ == '__main__':
     dag.add_tasks([task1, task2, task3, task4, task5, task6])
     executor = DagExecutor(dag)
     futures = executor.execute()
-    fexec = LocalhostExecutor()
+    executor.shutdown()
+
     result = futures['task6'].result()
     print('Tasks completed')
     print(result)

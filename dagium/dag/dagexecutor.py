@@ -52,6 +52,8 @@ class DagExecutor:
         self._num_final_tasks = len(self._dag.leaf_tasks)
         logger.info(f'DAG {self._dag.dag_id} has {self._num_final_tasks} final tasks')
 
+        self._futures = dict()
+
         # Start by executing the root tasks
         self._dependence_free_tasks = set(self._dag.root_tasks)
         self._running_tasks = set()
@@ -94,16 +96,8 @@ class DagExecutor:
 
         return self._futures
 
-    def on_future_done(self, task: Operator, future: Future):
+    def shutdown(self):
         """
-        Callback function that is called when a task has been executed
-
-        :param task: Task that has been executed
-        :param future: Future object that contains the output data of the task
+        Shutdown the executor
         """
-        self._running_tasks.remove(task)
-        self._dependence_free_tasks.remove(task)
-        self._finished_tasks.add(task)
-        for child in task.children:
-            if child.parents.issubset(self._finished_tasks):
-                self._dependence_free_tasks.append(child)
+        self._processor.shutdown()
